@@ -1,0 +1,21 @@
+services:
+  postgres:
+    image: postgres:17-alpine
+    container_name: kraft-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: kraft
+      POSTGRES_PASSWORD: kraft_dev
+      POSTGRES_DB: kraft_people
+    ports:
+      - '5433:5432'
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U kraft -d kraft_people']
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  postgres_data:
