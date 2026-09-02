@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { PeopleRepository } from './people.repository.js'
 
 const openStatesResponseSchema = z.object({
   results: z.array(
@@ -29,7 +30,7 @@ export interface Person {
   role: string | null
   imageUrl: string | null
   state: string
-  party: string
+  party: string | null
 }
 
 export interface FetchPeopleResult {
@@ -38,25 +39,28 @@ export interface FetchPeopleResult {
 }
 
 export class PeopleService {
-  constructor(private readonly apiKey: string) {
+  constructor(
+    private readonly apiKey: string,
+    private readonly peopleRepository: PeopleRepository,
+  ) {
     if (!apiKey) {
       throw new Error('OPENSTATES_API_KEY não configurada')
     }
   }
 
-  async fetchByState(state: string): Promise<FetchPeopleResult> {
+  async syncByState(state: string): Promise<FetchPeopleResult> {
     const results: z.infer<typeof openStatesResponseSchema>['results'] = []
     let page = 1
-    let maxPage = 5
+    let maxPage = 1
 
-    //do {
-    const response = await this.fetchPage(state, page)
-    //results.push(...response.results)
-    //maxPage = response.pagination.max_page
-    //page++
-    //} while (page <= maxPage)
+    do {
+      const response = await this.fetchPage(state, page)
+      results.push(...response.results)
+      maxPage = response.pagination.max_page
+      page++
+    } while (page <= maxPage)
 
-    const people: Person[] = response.results.map((person) => ({
+    const people: Person[] = results.map((person) => ({
       id: person.id,
       name: person.name,
       role: person.current_role?.title ?? null,
@@ -64,6 +68,8 @@ export class PeopleService {
       state: person.jurisdiction.name,
       party: person.party,
     }))
+
+    await this.peopleRepository.upsertMany(people)
 
     return {
       fetched: people.length,
@@ -91,5 +97,9 @@ export class PeopleService {
     }
 
     return openStatesResponseSchema.parse(await response.json())
+  }
+
+  async list() {
+    return this.peopleRepository.findAll()
   }
 }
