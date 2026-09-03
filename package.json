@@ -1,12 +1,17 @@
 {
-  "name": "api",
+  "name": "backend",
   "version": "1.0.0",
   "description": "",
   "main": "index.js",
   "scripts": {
-    "dev": "tsx watch --env-file=.env src/server.ts",
-    "start": "node dist/server.ts",
-    "format": "biome format --write"
+    "test": "tsx --test \"tests/unit/**/*.test.ts\"",
+    "format": "biome format --write .",
+    "validate": "pnpm run test && pnpm run format",
+    "prisma:generate": "prisma generate",
+    "dev": "pnpm run prisma:generate && pnpm run validate && tsx watch --env-file=.env src/server.ts",
+    "build": "pnpm run prisma:generate && pnpm run validate && tsc -p tsconfig.json",
+    "start": "node dist/server.js",
+    "start:local": "node --env-file=.env dist/server.js"
   },
   "keywords": [],
   "author": "",

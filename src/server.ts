@@ -26,7 +26,7 @@ if (!databaseUrl) {
   throw new Error('DATABASE_URL não foi definida')
 }
 
-const port = Number(process.env.PORT ?? 3000)
+const port = Number(process.env.PORT ?? 3001)
 
 if (!Number.isInteger(port) || port <= 0) {
   throw new Error('PORT possui um valor inválido')
@@ -116,8 +116,8 @@ async function start() {
       host: '0.0.0.0',
     })
 
-    app.log.info('Server is running at http://localhost:3000')
-    app.log.info('API documentation at http://localhost:3000/docs')
+    app.log.info('Server is running at http://localhost:3001')
+    app.log.info('API documentation at http://localhost:3001/docs')
   } catch (error) {
     app.log.error(error)
     process.exit(1)
