@@ -32,6 +32,7 @@ coverage/
 # Prisma com SQLite, caso seja utilizado
 prisma/*.db
 prisma/*.db-journal
+/generated/prisma/
 
 # Dados locais de containers, caso use bind mount
 .docker-data/
