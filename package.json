@@ -5,13 +5,13 @@
   "main": "index.js",
   "scripts": {
     "test": "tsx --test \"tests/unit/**/*.test.ts\"",
-    "format": "biome format --write .",
+    "test:watch": "tsx --test --watch \"tests/unit/**/*.test.ts\"",
     "validate": "pnpm run test && pnpm run format",
     "prisma:generate": "prisma generate",
     "dev": "pnpm run prisma:generate && pnpm run validate && tsx watch --env-file=.env src/server.ts",
     "build": "pnpm run prisma:generate && pnpm run validate && tsc -p tsconfig.json",
-    "start": "node dist/server.js",
-    "start:local": "node --env-file=.env dist/server.js"
+    "start": "node dist/src/server.js",
+    "start:local": "node --env-file=.env dist/src/server.js"
   },
   "keywords": [],
   "author": "",
