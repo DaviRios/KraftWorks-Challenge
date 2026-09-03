@@ -107,7 +107,9 @@ settings:
 
 importers:
 
-  .:
+  .: {}
+
+  backend:
     dependencies:
       '@fastify/cors':
         specifier: ^11.3.0
