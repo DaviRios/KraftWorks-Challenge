@@ -4,17 +4,15 @@ import { z } from 'zod'
 
 import type { PeopleService } from './people.service.js'
 
-const syncPeopleBodySchema = z
-  .object({
-    state: z
-      .string()
-      .trim()
-      .length(2)
-      .toUpperCase()
-      .regex(/^[A-Z]{2}$/)
-      .describe('Sigla de duas letras do estado em maiúsculas. Exemplo: CA.'),
-  })
-  .describe('Parâmetros da sincronização por estado')
+const peopleListQuerySchema = z.object({
+  state: z
+    .string()
+    .trim()
+    .length(2)
+    .toUpperCase()
+    .regex(/^[A-Z]{2}$/),
+  party: z.string().trim().optional(),
+})
 
 const personResponseSchema = z
   .object({
@@ -22,7 +20,12 @@ const personResponseSchema = z
     name: z.string().describe('Nome completo'),
     role: z.string().nullable().describe('Cargo político atual'),
     imageUrl: z.string().nullable().describe('URL da foto, quando disponível'),
-    state: z.string().describe('Nome da jurisdição ou estado'),
+    state: z
+      .string()
+      .length(2)
+      .toUpperCase()
+      .regex(/^[A-Z]{2}$/)
+      .describe('Nome da jurisdição ou estado'),
     party: z.string().nullable().describe('Partido político, quando disponível'),
   })
   .describe('Pessoa em cargo político')
@@ -75,8 +78,8 @@ export async function peopleController(
         operationId: 'syncPeopleByState',
         summary: 'Sincroniza pessoas de um estado',
         description:
-          'Consulta todas as páginas da OpenStates para a jurisdição informada e atualiza o cache PostgreSQL por meio de upsert. Esta operação consome a API externa.',
-        body: syncPeopleBodySchema,
+          'Queries all OpenStates pages for the specified jurisdiction and updates the PostgreSQL cache using an upsert. This operation uses the external API',
+        body: peopleListQuerySchema,
         response: {
           200: syncPeopleResponseSchema,
           400: validationErrorResponseSchema,
@@ -97,10 +100,16 @@ export async function peopleController(
           },
           'Failed to sync people from OpenStates API',
         )
-
-        return reply.code(502).send({
-          message: 'Não foi possível consultar a OpenStates',
-        })
+        if (!request.body.state) {
+          return reply.send({
+            message: 'Failed to sync people from OpenStates API',
+            statusCode: 400,
+          })
+        } else {
+          return reply.code(502).send({
+            message: 'Failed to sync people from OpenStates API',
+          })
+        }
       }
     },
   )
@@ -112,6 +121,7 @@ export async function peopleController(
         tags: ['People'],
         operationId: 'listPeople',
         summary: 'Lista pessoas do cache local',
+        querystring: peopleListQuerySchema,
         description:
           'Retorna as pessoas persistidas no PostgreSQL sem realizar chamadas à OpenStates.',
         response: {
@@ -120,9 +130,8 @@ export async function peopleController(
         },
       },
     },
-    async (_request, reply) => {
-      const people = await options.peopleService.list()
-
+    async (request, reply) => {
+      const people = await options.peopleService.list(request.query)
       return reply.code(200).send(people)
     },
   )

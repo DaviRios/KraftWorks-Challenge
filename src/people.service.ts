@@ -14,6 +14,7 @@ const openStatesResponseSchema = z.object({
         })
         .nullish(),
       jurisdiction: z.object({
+        id: z.string(),
         name: z.string(),
       }),
     }),
@@ -24,6 +25,11 @@ const openStatesResponseSchema = z.object({
   }),
 })
 
+export interface ListPeopleFilters {
+  state?: string
+  party?: string
+}
+
 export interface Person {
   id: string
   name: string
@@ -33,7 +39,7 @@ export interface Person {
   party: string | null
 }
 
-export interface FetchPeopleResult {
+export interface SyncPeopleResult {
   fetched: number
   people: Person[]
 }
@@ -48,7 +54,17 @@ export class PeopleService {
     }
   }
 
-  async syncByState(state: string): Promise<FetchPeopleResult> {
+  private extractStateCode(jurisdictionId: string): string {
+    const match = jurisdictionId.match(/\/state:([a-z]{2})(?:\/|$)/i)
+
+    if (!match) {
+      throw new Error(`Cannot extract state of jurisdiction: ${jurisdictionId}`)
+    }
+
+    return match[1].toUpperCase()
+  }
+
+  async syncByState(state: string): Promise<SyncPeopleResult> {
     const results: z.infer<typeof openStatesResponseSchema>['results'] = []
     let page = 1
     let maxPage = 1
@@ -64,8 +80,8 @@ export class PeopleService {
       id: person.id,
       name: person.name,
       role: person.current_role?.title ?? null,
-      imageUrl: person.image || null,
-      state: person.jurisdiction.name,
+      imageUrl: person.image ?? null,
+      state: this.extractStateCode(person.jurisdiction.id),
       party: person.party,
     }))
 
@@ -99,7 +115,7 @@ export class PeopleService {
     return openStatesResponseSchema.parse(await response.json())
   }
 
-  async list() {
-    return this.peopleRepository.findAll()
+  async list(filters: ListPeopleFilters = {}): Promise<Person[]> {
+    return this.peopleRepository.findAll(filters)
   }
 }
