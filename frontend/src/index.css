@@ -1,0 +1,66 @@
+:root {
+  --color-blue: #0758f7;
+  --color-blue-deep: #0645c6;
+  --color-blue-soft: #edf3ff;
+  --color-ink: #0d0e12;
+  --color-muted: #666b76;
+  --color-canvas: #ffffff;
+  --color-surface: #f7f8fa;
+  --color-line: #e3e5ea;
+  --color-green: #00b456;
+  --content-width: 1240px;
+  color: var(--color-ink);
+  background: var(--color-canvas);
+  font-family: "Manrope", "Segoe UI", sans-serif;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  min-width: 320px;
+  scroll-behavior: smooth;
+}
+
+body {
+  min-width: 320px;
+  min-height: 100vh;
+  margin: 0;
+  background: var(--color-canvas);
+}
+
+button,
+select {
+  font: inherit;
+}
+
+button,
+a,
+select {
+  -webkit-tap-highlight-color: transparent;
+}
+
+button {
+  border: 0;
+}
+
+::selection {
+  color: white;
+  background: var(--color-blue);
+}
+
+:focus-visible {
+  outline: 3px solid rgba(7, 88, 247, 0.35);
+  outline-offset: 3px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+}

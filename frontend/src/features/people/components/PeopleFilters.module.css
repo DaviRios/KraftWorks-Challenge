@@ -1,0 +1,131 @@
+.filters {
+  min-height: 120px;
+  padding: 24px 26px;
+  display: grid;
+  grid-template-columns: minmax(220px, 1fr) minmax(220px, 0.8fr) minmax(220px, 0.8fr);
+  align-items: end;
+  gap: 20px;
+  border: 1px solid var(--color-line);
+  border-radius: 20px;
+  background: white;
+  box-shadow: 0 18px 50px rgba(25, 36, 60, 0.08);
+}
+
+.filterIntro {
+  min-height: 64px;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.filterIcon {
+  width: 46px;
+  height: 46px;
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+  border-radius: 14px;
+  color: white;
+  background: var(--color-blue);
+}
+
+.filterIcon svg {
+  width: 22px;
+  height: 22px;
+}
+
+.filterIntro div {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.filterIntro strong {
+  color: var(--color-ink);
+  font-size: 0.9375rem;
+}
+
+.filterIntro small {
+  color: var(--color-green);
+  font-size: 0.75rem;
+  font-weight: 700;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  color: var(--color-muted);
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.selectWrap {
+  position: relative;
+  display: block;
+}
+
+.selectWrap select {
+  width: 100%;
+  min-height: 54px;
+  padding: 0 48px 0 16px;
+  border: 1px solid var(--color-line);
+  border-radius: 13px;
+  appearance: none;
+  color: var(--color-ink);
+  background: var(--color-surface);
+  cursor: pointer;
+  font-size: 0.9375rem;
+  font-weight: 700;
+  letter-spacing: 0;
+  text-transform: none;
+  transition:
+    border-color 160ms ease,
+    background-color 160ms ease;
+}
+
+.selectWrap select:hover {
+  border-color: #b9c7e3;
+  background: white;
+}
+
+.selectWrap select:disabled {
+  cursor: wait;
+  opacity: 0.7;
+}
+
+.selectWrap svg {
+  position: absolute;
+  top: 50%;
+  right: 17px;
+  width: 18px;
+  height: 18px;
+  color: var(--color-blue);
+  transform: translateY(-50%);
+  pointer-events: none;
+}
+
+@media (max-width: 840px) {
+  .filters {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .filterIntro {
+    grid-column: 1 / -1;
+  }
+}
+
+@media (max-width: 560px) {
+  .filters {
+    grid-template-columns: 1fr;
+    gap: 16px;
+    padding: 20px;
+    border-radius: 16px;
+  }
+
+  .filterIntro {
+    grid-column: auto;
+  }
+}

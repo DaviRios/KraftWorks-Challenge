@@ -21,8 +21,8 @@ services:
 
   backend:
     build:
-      context: ./backend
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: /backend/Dockerfile
     environment:
       NODE_ENV: production
       HOST: 0.0.0.0
@@ -40,8 +40,8 @@ services:
 
   frontend:
     build:
-      context: ./frontend
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: /frontend/Dockerfile
       args:
         VITE_API_URL: ${VITE_API_URL:-http://localhost:3001}
     ports:

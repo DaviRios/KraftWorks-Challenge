@@ -1,0 +1,261 @@
+.app {
+  min-height: 100vh;
+  overflow: hidden;
+  background:
+    radial-gradient(circle at 82% 8%, rgba(7, 88, 247, 0.08), transparent 24rem),
+    var(--color-canvas);
+}
+
+.header {
+  width: min(100% - 40px, var(--content-width));
+  min-height: 84px;
+  margin: 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 1px solid var(--color-line);
+}
+
+.brand,
+.footerBrand {
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  color: var(--color-ink);
+  font-size: 1.25rem;
+  font-weight: 800;
+  letter-spacing: -0.04em;
+  text-decoration: none;
+}
+
+.brandMark {
+  width: 32px;
+  height: 32px;
+  flex: 0 0 auto;
+  fill: var(--color-blue);
+}
+
+.sourceLabel {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  color: var(--color-muted);
+  font-size: 0.8125rem;
+  font-weight: 600;
+}
+
+.sourceLabel > span {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--color-green);
+  box-shadow: 0 0 0 5px rgba(0, 180, 86, 0.12);
+}
+
+.hero {
+  width: min(100% - 40px, var(--content-width));
+  min-height: 410px;
+  margin: 0 auto;
+  display: grid;
+  grid-template-columns: minmax(0, 1.25fr) minmax(260px, 0.75fr);
+  align-items: center;
+  gap: 72px;
+  padding: 64px 0 54px;
+}
+
+.heroCopy {
+  position: relative;
+  z-index: 1;
+}
+
+.eyebrow {
+  margin: 0 0 18px;
+  color: var(--color-blue);
+  font-size: 0.8125rem;
+  font-weight: 800;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.hero h1 {
+  max-width: 780px;
+  margin: 0;
+  color: var(--color-ink);
+  font-size: clamp(3.15rem, 6vw, 5.6rem);
+  font-weight: 800;
+  line-height: 0.96;
+  letter-spacing: -0.065em;
+}
+
+.hero h1 span {
+  color: var(--color-blue);
+}
+
+.intro {
+  max-width: 650px;
+  margin: 28px 0 0;
+  color: var(--color-muted);
+  font-size: 1.0625rem;
+  line-height: 1.75;
+}
+
+.heroAccent {
+  position: relative;
+  min-height: 280px;
+  display: grid;
+  place-items: center;
+}
+
+.heroAccent::before {
+  content: "";
+  position: absolute;
+  width: 250px;
+  height: 250px;
+  border: 1px solid rgba(7, 88, 247, 0.18);
+  border-radius: 50%;
+}
+
+.heroAccent::after {
+  content: "";
+  position: absolute;
+  width: 184px;
+  height: 184px;
+  border-radius: 48px 48px 48px 8px;
+  background: var(--color-blue);
+  transform: rotate(-8deg);
+  box-shadow: 0 28px 70px rgba(7, 88, 247, 0.26);
+}
+
+.accentCard {
+  position: relative;
+  z-index: 1;
+  width: 176px;
+  min-height: 154px;
+  padding: 28px;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  color: white;
+  transform: rotate(4deg);
+}
+
+.accentValue {
+  font-size: 4.5rem;
+  font-weight: 800;
+  line-height: 0.95;
+  letter-spacing: -0.08em;
+}
+
+.accentCard small {
+  max-width: 100px;
+  margin-top: 10px;
+  font-size: 0.75rem;
+  font-weight: 700;
+  line-height: 1.35;
+}
+
+.accentLines {
+  position: absolute;
+  z-index: 2;
+  right: 8px;
+  bottom: 18px;
+  width: 78px;
+  height: 14px;
+  border-top: 2px solid var(--color-green);
+  border-bottom: 2px solid var(--color-green);
+  transform: rotate(-8deg);
+}
+
+.footer {
+  width: min(100% - 40px, var(--content-width));
+  min-height: 132px;
+  margin: 72px auto 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  border-top: 1px solid var(--color-line);
+  color: var(--color-muted);
+  font-size: 0.875rem;
+}
+
+.footer p {
+  margin: 0;
+}
+
+.footerBrand {
+  font-size: 1rem;
+}
+
+.footerBrand .brandMark {
+  width: 24px;
+  height: 24px;
+}
+
+@media (max-width: 900px) {
+  .hero {
+    grid-template-columns: 1fr;
+    gap: 16px;
+    padding-top: 52px;
+  }
+
+  .heroAccent {
+    position: absolute;
+    top: 100px;
+    right: -80px;
+    min-height: 240px;
+    opacity: 0.12;
+    pointer-events: none;
+  }
+
+  .heroAccent::before,
+  .accentLines {
+    display: none;
+  }
+}
+
+@media (max-width: 600px) {
+  .header,
+  .hero,
+  .footer {
+    width: min(100% - 32px, var(--content-width));
+  }
+
+  .header {
+    min-height: 72px;
+  }
+
+  .brand {
+    font-size: 1.125rem;
+  }
+
+  .brandMark {
+    width: 28px;
+    height: 28px;
+  }
+
+  .sourceLabel {
+    font-size: 0;
+  }
+
+  .hero {
+    min-height: auto;
+    padding: 48px 0 44px;
+  }
+
+  .hero h1 {
+    font-size: clamp(2.75rem, 14vw, 4rem);
+  }
+
+  .intro {
+    margin-top: 22px;
+    font-size: 1rem;
+  }
+
+  .footer {
+    min-height: 156px;
+    flex-direction: column;
+    align-items: flex-start;
+    justify-content: center;
+  }
+}
