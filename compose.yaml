@@ -34,9 +34,6 @@ services:
     depends_on:
       database:
         condition: service_healthy
-    command: >
-      sh -c "pnpm exec prisma migrate deploy &&
-             pnpm start"
 
   frontend:
     build:

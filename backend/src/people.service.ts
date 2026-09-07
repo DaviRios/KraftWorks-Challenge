@@ -1,5 +1,5 @@
 import { z } from 'zod'
-import { PeopleRepository } from './people.repository.js'
+import type { PeopleRepository } from './people.repository.js'
 
 const openStatesResponseSchema = z.object({
   results: z.array(

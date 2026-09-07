@@ -1,19 +1,18 @@
+import { fastifyCors } from '@fastify/cors'
+import { fastifySwagger } from '@fastify/swagger'
+import { PrismaPg } from '@prisma/adapter-pg'
+import ScalarApiReference from '@scalar/fastify-api-reference'
 import { fastify } from 'fastify'
 import {
+  jsonSchemaTransform,
   serializerCompiler,
   validatorCompiler,
-  jsonSchemaTransform,
   type ZodTypeProvider,
 } from 'fastify-type-provider-zod'
-
-import { fastifySwagger } from '@fastify/swagger'
-import { fastifyCors } from '@fastify/cors'
-import ScalarApiReference from '@scalar/fastify-api-reference'
-import { peopleController } from './people.controller.js'
-import { PeopleService } from './people.service.js'
-import { PeopleRepository } from './people.repository.js'
-import { PrismaPg } from '@prisma/adapter-pg'
 import { PrismaClient } from '../generated/prisma/client.js'
+import { peopleController } from './people.controller.js'
+import { PeopleRepository } from './people.repository.js'
+import { PeopleService } from './people.service.js'
 
 const app = fastify({
   logger: true,

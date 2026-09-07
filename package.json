@@ -1,4 +1,7 @@
 {
   "name": "kraft-challenge",
-  "private": true
+  "private": true,
+  "devDependencies": {
+    "@types/node": "^26.5.0"
+  }
 }

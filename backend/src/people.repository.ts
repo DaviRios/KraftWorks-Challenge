@@ -1,4 +1,4 @@
-import { PrismaClient } from '../generated/prisma/client.js'
+import type { PrismaClient } from '../generated/prisma/client.js'
 import type { ListPeopleFilters, Person } from './people.service.js'
 
 export class PeopleRepository {
