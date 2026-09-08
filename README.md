@@ -1,216 +1,234 @@
-# Kraft Works People API
+# Kraft Challenge — People Directory
 
-Backend em Node.js e TypeScript para consultar pessoas em cargos políticos na
-[OpenStates API v3](https://v3.openstates.org/docs), armazenar os dados em
-PostgreSQL e disponibilizá-los ao frontend por uma API REST.
+Aplicação fullstack que consulta pessoas em cargos políticos na OpenStates,
+armazena os dados em PostgreSQL e os exibe em uma interface React com filtros
+por estado e partido.
 
-## Tecnologias
+O projeto pode ser executado por completo com Docker Compose. As migrations do
+banco são aplicadas automaticamente quando o backend inicia.
 
-- Node.js com TypeScript
-- Fastify
-- Zod
-- Prisma ORM
-- PostgreSQL 17
-- Docker Compose
-- OpenAPI/Swagger com interface Scalar
-- Biome
+## 1. Pré-requisitos
 
-## Estrutura do projeto
+Para executar a aplicação, você precisa de:
 
-```text
-backend/
-├── README.md
-└── api/
-    ├── compose.yaml
-    ├── prisma/
-    │   ├── migrations/
-    │   └── schema.prisma
-    ├── src/
-    │   ├── people.controller.ts
-    │   ├── people.repository.ts
-    │   ├── people.service.ts
-    │   └── server.ts
-    ├── .env.example
-    └── package.json
-```
+- [Docker Desktop](https://www.docker.com/products/docker-desktop/) instalado e
+  em execução;
+- um token da OpenStates. Crie uma conta no
+  [perfil da Plural Policy](https://open.pluralpolicy.com/accounts/profile/) e
+  gere seu API Token.
 
-## Configuração local
+Node.js e pnpm são necessários somente para executar os comandos de
+desenvolvimento fora dos containers.
 
-### 1. Token da OpenStates
+## 2. Criar o arquivo de ambiente
 
-Crie uma conta no
-[perfil da Plural Policy](https://open.pluralpolicy.com/accounts/profile/) e gere
-um token de API.
-
-### 2. Dependências e variáveis de ambiente
-
-```bash
-cd api
-pnpm install
-```
-
-Copie `api/.env.example` para `api/.env`. No PowerShell:
+Na raiz do projeto, abra o PowerShell e copie o arquivo de exemplo:
 
 ```powershell
 Copy-Item .env.example .env
 ```
 
-Preencha as variáveis:
+Depois, abra o arquivo `.env` e substitua os valores de exemplo. Uma configuração
+local pode ficar assim:
 
 ```dotenv
-OPENSTATES_API_KEY=seu-token
-DATABASE_URL=postgresql://kraft:kraft_dev@localhost:5433/kraft_people
+OPENSTATES_API_KEY=cole-seu-token-aqui
+POSTGRES_USER=postgres
+POSTGRES_PASSWORD=postgres
+POSTGRES_DB=people_db
+VITE_API_URL=http://localhost:3001
 ```
 
-O arquivo `.env` está no `.gitignore` e não deve ser versionado.
+Não adicione aspas nem espaços antes ou depois dos valores. O arquivo `.env` é
+ignorado pelo Git e não deve ser enviado ao repositório.
 
-### 3. PostgreSQL
+### Variáveis disponíveis
 
-```bash
-docker compose up -d
-pnpm exec prisma generate
-pnpm exec prisma migrate deploy
+| Variável | Obrigatória | Finalidade |
+| --- | --- | --- |
+| `OPENSTATES_API_KEY` | Sim | Autentica as requisições de sincronização na OpenStates. |
+| `PORT` | Não | Porta usada ao iniciar o backend manualmente. O Docker Compose fixa a porta `3001`. |
+| `POSTGRES_USER` | Não | Usuário do PostgreSQL. O padrão do Compose é `postgres`. |
+| `POSTGRES_PASSWORD` | Não | Senha do PostgreSQL. O padrão do Compose é `postgres`. |
+| `POSTGRES_DB` | Não | Nome do banco. O padrão do Compose é `people_db`. |
+| `VITE_API_URL` | Não | URL pública do backend usada pelo frontend. O padrão é `http://localhost:3001`. |
+
+O backend recebe a `DATABASE_URL` montada automaticamente pelo Docker Compose e
+escuta a porta `3001`; não é necessário configurar esses valores para o fluxo
+com Docker.
+
+## 3. Construir e iniciar a aplicação
+
+Ainda na raiz do projeto, execute:
+
+```powershell
+docker compose up --build
 ```
 
-O PostgreSQL é publicado na porta local `5433` e utiliza o volume persistente
-`postgres_data`.
+Esse comando constrói e inicia três containers separados: PostgreSQL, backend e
+frontend. Aguarde até os logs informarem que o backend está escutando na porta
+`3001` e o frontend está disponível.
 
-### 4. Servidor
+Para deixar os containers executando em segundo plano, use:
 
-```bash
-pnpm dev
+```powershell
+docker compose up --build -d
 ```
 
-Endereço local: `http://localhost:3000`.
+## 4. URLs locais
 
-## Endpoints
+Com os containers em execução:
+
+- frontend: [http://localhost:5173](http://localhost:5173);
+- backend: [http://localhost:3001](http://localhost:3001);
+- documentação interativa da API: [http://localhost:3001/docs](http://localhost:3001/docs);
+- especificação OpenAPI em JSON: [http://localhost:3001/docs/openapi.json](http://localhost:3001/docs/openapi.json).
+
+O endereço `http://localhost:5173` é a URL esperada para a execução local com
+Docker Compose. O desafio não exige publicação do frontend em um serviço de
+hosting.
+
+## 5. Executar a sincronização inicial
+
+Em uma instalação nova, o PostgreSQL começa vazio. Para carregar os dados:
+
+1. acesse [http://localhost:3001/docs](http://localhost:3001/docs);
+2. abra `POST /api/people/sync`;
+3. clique em **Test Request** e envie a requisição.
+
+Esse endpoint realiza a sincronização geral e **não recebe body nem parâmetros**.
+Também é possível executá-lo pelo PowerShell:
+
+```powershell
+Invoke-RestMethod -Method Post -Uri http://localhost:3001/api/people/sync
+```
+
+Uma resposta bem-sucedida apresenta a quantidade de pessoas persistidas e de
+jurisdições processadas:
+
+```json
+{
+  "fetched": 7527,
+  "states": 51
+}
+```
+
+Os números acima são apenas um exemplo e podem mudar conforme os dados da
+OpenStates.
+
+## 6. Tempo e cota da primeira carga
+
+A sincronização percorre todas as páginas dos 50 estados e do Distrito de
+Colúmbia. Por isso, a primeira carga pode levar vários minutos e consumir uma
+parte relevante da cota do token da OpenStates. Mantenha o backend em execução e
+aguarde a resposta antes de iniciar outra sincronização.
+
+Não é necessário chamar esse endpoint para navegar ou filtrar dados que já
+estejam salvos.
+
+## 7. Como o cache funciona
+
+O frontend consulta `GET /api/people`, e esse endpoint lê somente o PostgreSQL.
+Ele não chama a OpenStates durante a listagem ou a aplicação dos filtros.
+
+O endpoint `POST /api/people/sync` é o responsável por consultar a API externa e
+fazer `upsert` dos registros. O identificador da OpenStates é único no banco,
+evitando duplicações durante novas sincronizações.
+
+Como o volume do PostgreSQL é persistente, ao parar e iniciar a stack novamente
+os dados continuam disponíveis. Nas execuções futuras, basta subir os containers
+e abrir o frontend; sincronize novamente apenas quando quiser atualizar o cache.
+
+## 8. Parar a aplicação sem apagar os dados
+
+Na raiz do projeto, execute:
+
+```powershell
+docker compose down
+```
+
+Esse comando remove os containers e a rede, mas preserva o volume do PostgreSQL.
+
+## 9. Apagar containers e dados locais
+
+Para remover também o volume e todos os dados armazenados no PostgreSQL:
+
+```powershell
+docker compose down -v
+```
+
+Essa operação apaga o cache local. Na próxima inicialização será necessário
+executar uma nova sincronização completa.
+
+## 10. Desenvolvimento e validação
+
+Para executar lint, testes e builds fora do Docker, instale
+[Node.js](https://nodejs.org/) e ative o pnpm pelo Corepack:
+
+```powershell
+corepack enable
+pnpm install --frozen-lockfile
+```
+
+Execute os comandos abaixo a partir da raiz do projeto.
+
+### Backend
+
+```powershell
+pnpm --dir backend run lint
+pnpm --dir backend run test
+pnpm --dir backend run build
+```
+
+O build do backend também executa a geração do Prisma Client, os testes
+unitários, o lint e a compilação TypeScript.
+
+### Frontend
+
+```powershell
+pnpm --dir frontend run lint
+pnpm --dir frontend run build
+```
+
+Para regenerar os tipos TypeScript a partir do contrato OpenAPI, mantenha o
+backend em execução e use:
+
+```powershell
+pnpm --dir frontend run generate:types
+```
+
+## Endpoints principais
 
 ### `GET /api/people`
 
-Lista as pessoas atualmente armazenadas no PostgreSQL. A intenção desse endpoint
-é atender o frontend pelo cache local, sem realizar uma nova chamada à
-OpenStates.
+Lista pessoas armazenadas no PostgreSQL. O parâmetro `state` é obrigatório e
+`party` é opcional.
 
-Resposta esperada:
-
-```json
-[
-  {
-    "id": "identificador-da-pessoa",
-    "name": "Jane Doe",
-    "role": "Senator",
-    "imageUrl": "https://example.com/photo.jpg",
-    "state": "California",
-    "party": "Democratic"
-  }
-]
+```text
+GET /api/people?state=CA
+GET /api/people?state=CA&party=Democratic
 ```
 
 ### `POST /api/people/sync`
 
-Busca as páginas de pessoas do estado informado na OpenStates e executa `upsert`
-dos registros no PostgreSQL.
+Atualiza o cache PostgreSQL com dados da OpenStates. A rota não recebe body e
+pode levar vários minutos para responder.
 
-O código atual valida `state` como uma sigla de duas letras:
+## Estrutura do projeto
 
-```json
-{
-  "state": "CA"
-}
+```text
+kraft_challenge/
+├── backend/          # API Fastify, Prisma, migrations e testes unitários
+├── frontend/         # Vite, React, TypeScript e CSS Modules
+├── compose.yaml      # PostgreSQL, backend e frontend
+├── .env.example      # exemplo das variáveis do Docker Compose
+└── README.md
 ```
 
-Exemplo:
+## Tecnologias
 
-```bash
-curl -X POST http://localhost:3000/api/people/sync \
-  -H "Content-Type: application/json" \
-  -d '{"state":"CA"}'
-```
-
-Respostas documentadas:
-
-- `200`: sincronização concluída;
-- `400`: corpo da requisição inválido;
-- `500`: erro interno;
-- `502`: falha durante a sincronização com a OpenStates.
-
-## Swagger/OpenAPI
-
-Com o servidor em execução:
-
-- interface interativa: `http://localhost:3000/docs`;
-- especificação JSON: `http://localhost:3000/docs/openapi.json`;
-- especificação YAML: `http://localhost:3000/docs/openapi.yaml`.
-
-O Swagger descreve as duas rotas, seus payloads, campos de resposta, códigos HTTP
-e a diferença entre leitura do cache e sincronização externa.
-
-## Cache e banco de dados
-
-A tabela `people` possui:
-
-- UUID interno;
-- identificador externo único;
-- nome;
-- cargo;
-- URL da foto;
-- estado;
-- partido;
-- datas de criação e atualização.
-
-O endpoint de sincronização utiliza o identificador externo no `upsert`, evitando
-registros duplicados. A tabela também possui índices para estado e partido.
-
-## Checklist atualizado
-
-### Requisitos implementados no código
-
-- [x] Backend em TypeScript com Node.js.
-- [x] Fastify configurado.
-- [x] Token lido por `OPENSTATES_API_KEY`.
-- [x] Autenticação externa pelo header `X-API-KEY`.
-- [x] Consumo do endpoint `/people` da OpenStates.
-- [x] Mapeamento de nome, cargo, foto, estado e partido.
-- [x] Paginação da resposta externa.
-- [x] Validação da resposta da OpenStates com Zod.
-- [x] `GET /api/people` criado e registrado.
-- [x] `POST /api/people/sync` criado e registrado.
-- [x] Persistência por `upsert` implementada.
-- [x] PostgreSQL definido no Docker Compose.
-- [x] Volume persistente e healthcheck do banco.
-- [x] Schema Prisma e migration inicial.
-- [x] Índices para estado e partido.
-- [x] Swagger/Scalar configurado.
-- [x] Descrições, schemas e códigos HTTP documentados no Swagger.
-- [x] README e `.env.example` criados.
-
-O desafio exige endpoint **ou** agendamento para atualização. A existência do
-`POST /api/people/sync` cobre a opção de atualização por endpoint.
-
-### Pontos pendentes ou que precisam de revisão
-
-- [ ] Corrigir o script manual `test-people-service.ts`, que ainda usa a
-  assinatura antiga de `PeopleService`.
-- [ ] Fazer a checagem TypeScript completa passar; atualmente o arquivo de teste
-  manual gera erros de compilação.
-- [ ] Revisar a inicialização do Prisma Client no servidor com a configuração do
-  Prisma 7 e do adapter PostgreSQL.
-- [ ] Alinhar o valor salvo em `state`: o serviço mapeia o nome da jurisdição,
-  enquanto a coluna atual está limitada a dois caracteres.
-- [ ] Confirmar se a sigla de duas letras enviada à OpenStates é aceita como
-  jurisdição ou convertê-la para nome/identificador OCD antes da chamada.
-- [ ] Alinhar o identificador retornado pelo `GET /api/people` com o identificador
-  retornado pela sincronização.
-- [ ] Adicionar testes unitários automatizados.
-- [ ] Adicionar testes de integração com PostgreSQL.
-- [ ] Criar um script de build e corrigir o script `start` para produção.
-- [ ] Adicionar filtros e paginação ao `GET /api/people`.
-- [ ] Adicionar healthcheck da aplicação.
-- [ ] Adicionar sincronização agendada, caso desejado; ela é opcional para o
-  requisito atual.
-
-## Observação sobre a revisão
-
-Esta atualização foi documental. Ela não executou uma nova sincronização paga
-com a OpenStates nem alterou a lógica de negócio, o schema do banco ou as
-migrations existentes.
+- **Frontend:** Vite, React, TypeScript, TanStack Query, Fetch API, CSS Modules e
+  Biome;
+- **Backend:** Node.js, TypeScript, Fastify, Zod, Prisma, OpenAPI/Swagger e Biome;
+- **Banco de dados:** PostgreSQL 17 com volume persistente;
+- **Infraestrutura:** Docker e Docker Compose.
