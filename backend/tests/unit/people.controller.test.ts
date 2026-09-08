@@ -4,7 +4,11 @@ import type { FastifyInstance } from 'fastify'
 import type { ZodType } from 'zod'
 
 import { peopleController } from '../../src/people.controller.js'
-import type { ListPeopleFilters, PeopleService } from '../../src/people.service.js'
+import {
+  type ListPeopleFilters,
+  type PeopleService,
+  US_STATE_CODES,
+} from '../../src/people.service.js'
 import { makePerson } from './fixtures.js'
 
 interface UnitRequest {
@@ -30,9 +34,9 @@ interface CapturedRoute {
 async function setup(t: TestContext) {
   const routes = new Map<string, CapturedRoute>()
   const service = {
-    syncByState: t.mock.fn<PeopleService['syncByState']>(async () => ({
+    syncAll: t.mock.fn<PeopleService['syncAll']>(async () => ({
       fetched: 0,
-      people: [],
+      states: US_STATE_CODES.length,
     })),
     list: t.mock.fn<PeopleService['list']>(async () => []),
   }
@@ -95,19 +99,18 @@ describe('peopleController', () => {
     assert.deepEqual([...routes.keys()].sort(), ['GET /people', 'POST /people/sync'])
   })
 
-  it('sincroniza o estado validado e envia o resultado com status 200', async (t) => {
+  it('sincroniza todos os estados e envia o resumo com status 200', async (t) => {
     const { route, service, request, reply, logError } = await setup(t)
     const sync = route('POST /people/sync')
-    assert.ok(sync.schema.body)
-    request.body = sync.schema.body.parse({ state: ' ca ' }) as ListPeopleFilters
-    const result = { fetched: 1, people: [makePerson()] }
-    service.syncByState.mock.mockImplementation(async () => result)
+    assert.equal(sync.schema.body, undefined)
+    const result = { fetched: 123, states: US_STATE_CODES.length }
+    service.syncAll.mock.mockImplementation(async () => result)
 
     assert.equal(await sync.handler(request, reply), reply)
     assert.equal(reply.statusCode, 200)
     assert.deepEqual(reply.payload, result)
-    assert.equal(service.syncByState.mock.callCount(), 1)
-    assert.deepEqual(service.syncByState.mock.calls[0].arguments, ['CA'])
+    assert.equal(service.syncAll.mock.callCount(), 1)
+    assert.deepEqual(service.syncAll.mock.calls[0].arguments, [])
     assert.equal(service.list.mock.callCount(), 0)
     assert.equal(logError.mock.callCount(), 0)
   })
@@ -118,13 +121,16 @@ describe('peopleController', () => {
     await route('POST /people/sync').handler(request, reply)
 
     assert.equal(reply.statusCode, 200)
-    assert.deepEqual(reply.payload, { fetched: 0, people: [] })
+    assert.deepEqual(reply.payload, {
+      fetched: 0,
+      states: US_STATE_CODES.length,
+    })
   })
 
   for (const error of [new Error('Detalhes internos da falha'), 'Falha sem Error']) {
     it(`responde 502 e registra a falha: ${String(error)}`, async (t) => {
       const { route, service, request, reply, logError } = await setup(t)
-      service.syncByState.mock.mockImplementation(async () => {
+      service.syncAll.mock.mockImplementation(async () => {
         throw error
       })
 
@@ -135,10 +141,10 @@ describe('peopleController', () => {
       })
       assert.equal(logError.mock.callCount(), 1)
       assert.deepEqual(logError.mock.calls[0].arguments, [
-        { err: error, state: 'CA' },
+        { err: error },
         'Failed to sync people from OpenStates API',
       ])
-      assert.equal(service.syncByState.mock.callCount(), 1)
+      assert.equal(service.syncAll.mock.callCount(), 1)
       assert.equal(service.list.mock.callCount(), 0)
     })
   }
@@ -161,7 +167,7 @@ describe('peopleController', () => {
     assert.deepEqual(service.list.mock.calls[0].arguments, [
       { state: 'NY', party: 'Republican' },
     ])
-    assert.equal(service.syncByState.mock.callCount(), 0)
+    assert.equal(service.syncAll.mock.callCount(), 0)
   })
 
   it('envia uma lista vazia quando o serviço não encontra pessoas', async (t) => {
@@ -172,7 +178,7 @@ describe('peopleController', () => {
     assert.equal(reply.statusCode, 200)
     assert.deepEqual(reply.payload, [])
     assert.deepEqual(service.list.mock.calls[0].arguments, [{ state: 'CA' }])
-    assert.equal(service.syncByState.mock.callCount(), 0)
+    assert.equal(service.syncAll.mock.callCount(), 0)
   })
 
   it('delega ao chamador o tratamento de erros do handler de listagem', async (t) => {
@@ -187,14 +193,11 @@ describe('peopleController', () => {
       (reason) => reason === error,
     )
     assert.equal(reply.payload, undefined)
-    assert.equal(service.syncByState.mock.callCount(), 0)
+    assert.equal(service.syncAll.mock.callCount(), 0)
   })
 })
 
-for (const [routeKey, schemaKey] of [
-  ['GET /people', 'querystring'],
-  ['POST /people/sync', 'body'],
-] as const) {
+for (const [routeKey, schemaKey] of [['GET /people', 'querystring']] as const) {
   describe(`Schema de entrada de ${routeKey}`, () => {
     it('normaliza a sigla e aceita um partido opcional', async (t) => {
       const { route } = await setup(t)
@@ -248,42 +251,38 @@ for (const [routeKey, schemaKey] of [
 }
 
 describe('Schemas de resposta de peopleController', () => {
-  it('aceita pessoas com cargo, foto e partido nulos nas duas rotas', async (t) => {
+  it('aceita pessoas com cargo, foto e partido nulos na consulta', async (t) => {
     const { route } = await setup(t)
     const people = [makePerson({ role: null, imageUrl: null, party: null })]
 
     assert.deepEqual(route('GET /people').schema.response[200].parse(people), people)
-    const result = { fetched: 1, people }
-    assert.deepEqual(
-      route('POST /people/sync').schema.response[200].parse(result),
-      result,
-    )
   })
 
-  it('exige uma contagem inteira e não negativa na sincronização', async (t) => {
+  it('valida as contagens do resumo da sincronização', async (t) => {
     const { route } = await setup(t)
     const schema = route('POST /people/sync').schema.response[200]
 
-    assert.deepEqual(schema.parse({ fetched: 0, people: [] }), {
+    assert.deepEqual(schema.parse({ fetched: 0, states: US_STATE_CODES.length }), {
       fetched: 0,
-      people: [],
+      states: US_STATE_CODES.length,
     })
     for (const fetched of [-1, 1.5, '1', null, undefined]) {
-      assert.equal(schema.safeParse({ fetched, people: [] }).success, false)
+      assert.equal(
+        schema.safeParse({ fetched, states: US_STATE_CODES.length }).success,
+        false,
+      )
+    }
+    for (const states of [-1, 0, 1.5, '51', null, undefined]) {
+      assert.equal(schema.safeParse({ fetched: 0, states }).success, false)
     }
   })
 
   it('rejeita pessoas sem os campos obrigatórios ou com estado inválido', async (t) => {
     const { route } = await setup(t)
     const listSchema = route('GET /people').schema.response[200]
-    const syncSchema = route('POST /people/sync').schema.response[200]
 
     for (const person of [{ id: 'incomplete' }, makePerson({ state: 'California' })]) {
       assert.equal(listSchema.safeParse([person]).success, false)
-      assert.equal(
-        syncSchema.safeParse({ fetched: 1, people: [person] }).success,
-        false,
-      )
     }
   })
 })

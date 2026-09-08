@@ -14,10 +14,10 @@ export interface paths {
     get?: never
     put?: never
     /**
-     * Sincroniza pessoas de um estado
-     * @description Queries all OpenStates pages for the specified jurisdiction and updates the PostgreSQL cache using an upsert. This operation uses the external API
+     * Sincroniza pessoas de todos os estados
+     * @description Percorre todas as páginas da OpenStates para os 50 estados e o Distrito de Colúmbia, respeita o limite de requisições da API externa e atualiza o cache PostgreSQL usando upsert. A operação pode levar vários minutos.
      */
-    post: operations['syncPeopleByState']
+    post: operations['syncAllPeople']
     delete?: never
     options?: never
     head?: never
@@ -56,23 +56,16 @@ export interface components {
 }
 export type $defs = Record<string, never>
 export interface operations {
-  syncPeopleByState: {
+  syncAllPeople: {
     parameters: {
       query?: never
       header?: never
       path?: never
       cookie?: never
     }
-    requestBody: {
-      content: {
-        'application/json': {
-          state: string
-          party?: string
-        }
-      }
-    }
+    requestBody?: never
     responses: {
-      /** @description Resultado da sincronização */
+      /** @description Resumo da sincronização geral */
       200: {
         headers: {
           [name: string]: unknown
@@ -81,39 +74,8 @@ export interface operations {
           'application/json': {
             /** @description Quantidade de pessoas recebidas e persistidas */
             fetched: number
-            /** @description Pessoas sincronizadas */
-            people: {
-              /** @description Identificador da pessoa na OpenStates */
-              id: string
-              /** @description Nome completo */
-              name: string
-              /** @description Cargo político atual */
-              role: string | null
-              /** @description URL da foto, quando disponível */
-              imageUrl: string | null
-              /** @description Nome da jurisdição ou estado */
-              state: string
-              /** @description Partido político, quando disponível */
-              party: string | null
-            }[]
-          }
-        }
-      }
-      /** @description Erro de validação da requisição */
-      400: {
-        headers: {
-          [name: string]: unknown
-        }
-        content: {
-          'application/json': {
-            /** @description Código HTTP */
-            statusCode: number
-            /** @description Código interno do Fastify */
-            code: string
-            /** @description Categoria do erro HTTP */
-            error: string
-            /** @description Detalhes da validação */
-            message: string
+            /** @description Quantidade de estados e jurisdições sincronizados */
+            states: number
           }
         }
       }
@@ -175,6 +137,24 @@ export interface operations {
             /** @description Partido político, quando disponível */
             party: string | null
           }[]
+        }
+      }
+      /** @description Erro de validação da requisição */
+      400: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': {
+            /** @description Código HTTP */
+            statusCode: number
+            /** @description Código interno do Fastify */
+            code: string
+            /** @description Categoria do erro HTTP */
+            error: string
+            /** @description Detalhes da validação */
+            message: string
+          }
         }
       }
       /** @description Erro da aplicação */

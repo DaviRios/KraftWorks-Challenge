@@ -3,10 +3,18 @@ import { describe, it, type TestContext } from 'node:test'
 import { ZodError } from 'zod'
 
 import type { PeopleRepository } from '../../src/people.repository.js'
-import { PeopleService } from '../../src/people.service.js'
+import {
+  PeopleService,
+  type PeopleServiceOptions,
+  US_STATE_CODES,
+} from '../../src/people.service.js'
 import { makeOpenStatesPage, makeOpenStatesPerson, makePerson } from './fixtures.js'
 
-function setup(t: TestContext, apiKey = 'unit-test-api-key') {
+function setup(
+  t: TestContext,
+  apiKey = 'unit-test-api-key',
+  options: PeopleServiceOptions = {},
+) {
   const repository = {
     upsertMany: t.mock.fn<PeopleRepository['upsertMany']>(async () => undefined),
     findAll: t.mock.fn<PeopleRepository['findAll']>(async () => []),
@@ -16,7 +24,10 @@ function setup(t: TestContext, apiKey = 'unit-test-api-key') {
   fetchMock.mock.mockImplementation(async () => {
     throw new Error('Chamada fetch sem resposta simulada')
   })
-  const service = new PeopleService(apiKey, repository as unknown as PeopleRepository)
+  const service = new PeopleService(apiKey, repository as unknown as PeopleRepository, {
+    maxRateLimitRetries: 0,
+    ...options,
+  })
 
   return { service, repository, fetchMock }
 }
@@ -33,6 +44,67 @@ describe('PeopleService', { concurrency: false }, () => {
     assert.throws(() => setup(t, ''), {
       message: 'OPENSTATES_API_KEY não configurada',
     })
+  })
+
+  it('sincroniza todos os estados sequencialmente e soma as pessoas', async (t) => {
+    const { service, repository, fetchMock } = setup(t)
+    fetchMock.mock.mockImplementation(async (input) => {
+      assert.ok(input instanceof URL)
+      const state = input.searchParams.get('jurisdiction')
+      assert.ok(state)
+
+      return jsonResponse(
+        makeOpenStatesPage([
+          makeOpenStatesPerson({
+            id: `ocd-person/${state.toLowerCase()}`,
+            name: `Person ${state}`,
+            jurisdiction: {
+              id: `ocd-jurisdiction/country:us/state:${state.toLowerCase()}/government`,
+              name: state,
+            },
+          }),
+        ]),
+      )
+    })
+
+    assert.deepEqual(await service.syncAll(), {
+      fetched: US_STATE_CODES.length,
+      states: US_STATE_CODES.length,
+    })
+    assert.deepEqual(
+      fetchMock.mock.calls.map(({ arguments: [input] }) => {
+        assert.ok(input instanceof URL)
+        return input.searchParams.get('jurisdiction')
+      }),
+      [...US_STATE_CODES],
+    )
+    assert.equal(repository.upsertMany.mock.callCount(), US_STATE_CODES.length)
+  })
+
+  it('interrompe a sincronização geral quando um estado falha', async (t) => {
+    const { service, repository, fetchMock } = setup(t)
+    fetchMock.mock.mockImplementation(async (input) => {
+      assert.ok(input instanceof URL)
+      const state = input.searchParams.get('jurisdiction')
+
+      if (state === 'AZ') {
+        return new Response('Erro', { status: 503 })
+      }
+
+      return jsonResponse(makeOpenStatesPage())
+    })
+
+    await assert.rejects(service.syncAll(), {
+      message: 'OpenStates respondeu com status 503',
+    })
+    assert.deepEqual(
+      fetchMock.mock.calls.map(({ arguments: [input] }) => {
+        assert.ok(input instanceof URL)
+        return input.searchParams.get('jurisdiction')
+      }),
+      ['AL', 'AK', 'AZ'],
+    )
+    assert.equal(repository.upsertMany.mock.callCount(), 2)
   })
 
   it('autentica a consulta, aplica timeout e mapeia os campos', async (t) => {
@@ -52,7 +124,7 @@ describe('PeopleService', { concurrency: false }, () => {
     assert.deepEqual(Object.fromEntries(input.searchParams), {
       jurisdiction: 'CA',
       page: '1',
-      per_page: '10',
+      per_page: '50',
     })
     assert.deepEqual(options?.headers, {
       Accept: 'application/json',
@@ -76,7 +148,7 @@ describe('PeopleService', { concurrency: false }, () => {
     fetchMock.mock.mockImplementation(async (input) => {
       assert.ok(input instanceof URL)
       assert.equal(input.searchParams.get('jurisdiction'), 'CA')
-      assert.equal(input.searchParams.get('per_page'), '10')
+      assert.equal(input.searchParams.get('per_page'), '50')
       assert.equal(repository.upsertMany.mock.callCount(), 0)
       const page = Number(input.searchParams.get('page'))
       assert.ok(page >= 1 && page <= 3)
@@ -212,6 +284,58 @@ describe('PeopleService', { concurrency: false }, () => {
       assert.equal(repository.upsertMany.mock.callCount(), 0)
     })
   }
+
+  it('aguarda e repete uma página limitada pela OpenStates', async (t) => {
+    const wait = t.mock.fn<(milliseconds: number) => Promise<void>>(async () =>
+      Promise.resolve(),
+    )
+    const { service, repository, fetchMock } = setup(t, 'unit-test-api-key', {
+      maxRateLimitRetries: 1,
+      sleep: wait,
+    })
+    fetchMock.mock.mockImplementationOnce(
+      async () =>
+        new Response('Limite excedido', {
+          status: 429,
+          headers: { 'Retry-After': '2' },
+        }),
+      0,
+    )
+    fetchMock.mock.mockImplementationOnce(
+      async () => jsonResponse(makeOpenStatesPage()),
+      1,
+    )
+
+    assert.deepEqual(await service.syncByState('CA'), {
+      fetched: 1,
+      people: [makePerson()],
+    })
+    assert.equal(fetchMock.mock.callCount(), 2)
+    assert.deepEqual(wait.mock.calls[0].arguments, [2_000])
+    assert.equal(repository.upsertMany.mock.callCount(), 1)
+  })
+
+  it('aguarda um minuto quando o 429 não informa Retry-After', async (t) => {
+    const wait = t.mock.fn<(milliseconds: number) => Promise<void>>(async () =>
+      Promise.resolve(),
+    )
+    const { service, fetchMock } = setup(t, 'unit-test-api-key', {
+      maxRateLimitRetries: 1,
+      sleep: wait,
+    })
+    fetchMock.mock.mockImplementationOnce(
+      async () => new Response('Limite excedido', { status: 429 }),
+      0,
+    )
+    fetchMock.mock.mockImplementationOnce(
+      async () => jsonResponse(makeOpenStatesPage()),
+      1,
+    )
+
+    await service.syncByState('CA')
+
+    assert.deepEqual(wait.mock.calls[0].arguments, [60_000])
+  })
 
   it('propaga erros de rede sem persistir dados', async (t) => {
     const { service, repository, fetchMock } = setup(t)
