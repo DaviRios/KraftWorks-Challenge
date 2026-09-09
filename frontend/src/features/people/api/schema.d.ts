@@ -15,7 +15,7 @@ export interface paths {
     put?: never
     /**
      * Sincroniza pessoas de todos os estados
-     * @description Percorre todas as páginas da OpenStates para os 50 estados e o Distrito de Colúmbia, respeita o limite de requisições da API externa e atualiza o cache PostgreSQL usando upsert. A operação pode levar vários minutos.
+     * @description Sincroniza as jurisdições sem dados ou cuja última atualização ocorreu há mais de sete dias. Percorre as páginas da OpenStates, respeita o limite da API externa e atualiza o cache PostgreSQL usando upsert. A primeira execução pode levar vários minutos.
      */
     post: operations['syncAllPeople']
     delete?: never
@@ -74,8 +74,20 @@ export interface operations {
           'application/json': {
             /** @description Quantidade de pessoas recebidas e persistidas */
             fetched: number
-            /** @description Quantidade de estados e jurisdições sincronizados */
+            /** @description Quantidade de estados e jurisdições sincronizados nesta execução */
             states: number
+          }
+        }
+      }
+      /** @description Erro da aplicação */
+      409: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': {
+            /** @description Descrição do erro */
+            message: string
           }
         }
       }

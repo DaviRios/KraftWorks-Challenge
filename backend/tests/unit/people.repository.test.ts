@@ -2,8 +2,21 @@ import assert from 'node:assert/strict'
 import { describe, it, type TestContext } from 'node:test'
 
 import { PeopleRepository } from '../../src/people.repository.js'
-import type { ListPeopleFilters, Person } from '../../src/people.service.js'
+import type {
+  ListPeopleFilters,
+  Person,
+  StateLastUpdate,
+} from '../../src/people.types.js'
 import { makePerson } from './fixtures.js'
+
+const personSelect = {
+  externalId: true,
+  name: true,
+  role: true,
+  imageUrl: true,
+  state: true,
+  party: true,
+}
 
 type DatabasePerson = Omit<Person, 'id'> & {
   id: string
@@ -24,12 +37,22 @@ function makeRecord(overrides: Partial<DatabasePerson> = {}): DatabasePerson {
   }
 }
 
-function setup(t: TestContext, records: DatabasePerson[] = []) {
+function setup(
+  t: TestContext,
+  records: DatabasePerson[] = [],
+  stateUpdates: StateLastUpdate[] = [],
+) {
   // Somente os métodos usados pelo repositório: nenhum PrismaClient é criado.
   const prisma = {
     person: {
       upsert: t.mock.fn((_args: unknown) => Promise.resolve(undefined)),
       findMany: t.mock.fn(async (_args: unknown) => records),
+      groupBy: t.mock.fn(async (_args: unknown) =>
+        stateUpdates.map(({ state, updatedAt }) => ({
+          state,
+          _max: { updatedAt },
+        })),
+      ),
     },
     $transaction: t.mock.fn(async (operations: Promise<unknown>[]) =>
       Promise.all(operations),
@@ -41,6 +64,33 @@ function setup(t: TestContext, records: DatabasePerson[] = []) {
 
   return { repository, prisma }
 }
+
+describe('PeopleRepository.updatesByState', () => {
+  it('retorna a atualização mais recente agrupada por estado', async (t) => {
+    const updates = [
+      {
+        state: 'CA',
+        updatedAt: new Date('2026-09-08T12:00:00.000Z'),
+      },
+      {
+        state: 'DC',
+        updatedAt: null,
+      },
+    ]
+    const { repository, prisma } = setup(t, [], updates)
+
+    assert.deepEqual(await repository.updatesByState(), updates)
+    assert.equal(prisma.person.groupBy.mock.callCount(), 1)
+    assert.deepEqual(prisma.person.groupBy.mock.calls[0].arguments, [
+      {
+        by: ['state'],
+        _max: {
+          updatedAt: true,
+        },
+      },
+    ])
+  })
+})
 
 describe('PeopleRepository.upsertMany', () => {
   it('usa o ID externo e mapeia criação e atualização', async (t) => {
@@ -177,7 +227,7 @@ describe('PeopleRepository.findAll', () => {
     assert.deepEqual(await repository.findAll(), [makePerson()])
     assert.equal(prisma.person.findMany.mock.callCount(), 1)
     assert.deepEqual(prisma.person.findMany.mock.calls[0].arguments, [
-      { where: {}, orderBy: { name: 'asc' } },
+      { where: {}, orderBy: { name: 'asc' }, select: personSelect },
     ])
     assert.equal(prisma.person.upsert.mock.callCount(), 0)
     assert.equal(prisma.$transaction.mock.callCount(), 0)
@@ -231,7 +281,7 @@ describe('PeopleRepository.findAll', () => {
 
       assert.equal(prisma.person.findMany.mock.callCount(), 1)
       assert.deepEqual(prisma.person.findMany.mock.calls[0].arguments, [
-        { where: expectedWhere, orderBy: { name: 'asc' } },
+        { where: expectedWhere, orderBy: { name: 'asc' }, select: personSelect },
       ])
     })
   }

@@ -6,6 +6,7 @@ import type { PeopleRepository } from '../../src/people.repository.js'
 import {
   PeopleService,
   type PeopleServiceOptions,
+  SyncAlreadyRunningError,
   US_STATE_CODES,
 } from '../../src/people.service.js'
 import { makeOpenStatesPage, makeOpenStatesPerson, makePerson } from './fixtures.js'
@@ -16,6 +17,7 @@ function setup(
   options: PeopleServiceOptions = {},
 ) {
   const repository = {
+    updatesByState: t.mock.fn<PeopleRepository['updatesByState']>(async () => []),
     upsertMany: t.mock.fn<PeopleRepository['upsertMany']>(async () => undefined),
     findAll: t.mock.fn<PeopleRepository['findAll']>(async () => []),
   }
@@ -59,7 +61,10 @@ describe('PeopleService', { concurrency: false }, () => {
             id: `ocd-person/${state.toLowerCase()}`,
             name: `Person ${state}`,
             jurisdiction: {
-              id: `ocd-jurisdiction/country:us/state:${state.toLowerCase()}/government`,
+              id:
+                state === 'DC'
+                  ? 'ocd-jurisdiction/country:us/district:dc/government'
+                  : `ocd-jurisdiction/country:us/state:${state.toLowerCase()}/government`,
               name: state,
             },
           }),
@@ -79,10 +84,116 @@ describe('PeopleService', { concurrency: false }, () => {
       [...US_STATE_CODES],
     )
     assert.equal(repository.upsertMany.mock.callCount(), US_STATE_CODES.length)
+    assert.equal(repository.updatesByState.mock.callCount(), 1)
+  })
+
+  it('ignora todos os estados atualizados há menos de sete dias', async (t) => {
+    const now = new Date('2026-09-09T12:00:00.000Z')
+    const { service, repository, fetchMock } = setup(t, 'unit-test-api-key', {
+      now: () => now,
+    })
+    repository.updatesByState.mock.mockImplementation(async () =>
+      US_STATE_CODES.map((state) => ({
+        state,
+        updatedAt: new Date('2026-09-08T12:00:00.000Z'),
+      })),
+    )
+
+    assert.deepEqual(await service.syncAll(), {
+      fetched: 0,
+      states: 0,
+    })
+    assert.equal(repository.updatesByState.mock.callCount(), 1)
+    assert.equal(fetchMock.mock.callCount(), 0)
+    assert.equal(repository.upsertMany.mock.callCount(), 0)
+  })
+
+  it('sincroniza somente estados vencidos ou ausentes do cache', async (t) => {
+    const now = new Date('2026-09-09T12:00:00.000Z')
+    const { service, repository, fetchMock } = setup(t, 'unit-test-api-key', {
+      now: () => now,
+    })
+    repository.updatesByState.mock.mockImplementation(async () =>
+      US_STATE_CODES.filter((state) => state !== 'DC').map((state) => ({
+        state,
+        updatedAt:
+          state === 'CA'
+            ? new Date('2026-09-01T11:59:59.999Z')
+            : new Date('2026-09-08T12:00:00.000Z'),
+      })),
+    )
+    fetchMock.mock.mockImplementation(async (input) => {
+      assert.ok(input instanceof URL)
+      const state = input.searchParams.get('jurisdiction')
+      assert.ok(state === 'CA' || state === 'DC')
+
+      return jsonResponse(
+        makeOpenStatesPage([
+          makeOpenStatesPerson({
+            id: `ocd-person/${state.toLowerCase()}`,
+            jurisdiction: {
+              id:
+                state === 'DC'
+                  ? 'ocd-jurisdiction/country:us/district:dc/government'
+                  : 'ocd-jurisdiction/country:us/state:ca/government',
+              name: state,
+            },
+          }),
+        ]),
+      )
+    })
+
+    assert.deepEqual(await service.syncAll(), {
+      fetched: 2,
+      states: 2,
+    })
+    assert.deepEqual(
+      fetchMock.mock.calls.map(({ arguments: [input] }) => {
+        assert.ok(input instanceof URL)
+        return input.searchParams.get('jurisdiction')
+      }),
+      ['CA', 'DC'],
+    )
+    assert.equal(repository.updatesByState.mock.callCount(), 1)
+    assert.equal(repository.upsertMany.mock.callCount(), 2)
+  })
+
+  it('rejeita uma segunda sincronização enquanto a primeira está ativa', async (t) => {
+    const now = new Date('2026-09-09T12:00:00.000Z')
+    const { service, repository, fetchMock } = setup(t, 'unit-test-api-key', {
+      now: () => now,
+    })
+    let releaseUpdates: (
+      updates: Awaited<ReturnType<PeopleRepository['updatesByState']>>,
+    ) => void = () => undefined
+    const pendingUpdates = new Promise<
+      Awaited<ReturnType<PeopleRepository['updatesByState']>>
+    >((resolve) => {
+      releaseUpdates = resolve
+    })
+    repository.updatesByState.mock.mockImplementation(async () => pendingUpdates)
+
+    const firstSync = service.syncAll()
+    await Promise.resolve()
+
+    await assert.rejects(service.syncAll(), SyncAlreadyRunningError)
+
+    releaseUpdates(
+      US_STATE_CODES.map((state) => ({
+        state,
+        updatedAt: now,
+      })),
+    )
+    assert.deepEqual(await firstSync, { fetched: 0, states: 0 })
+    assert.equal(repository.updatesByState.mock.callCount(), 1)
+    assert.equal(fetchMock.mock.callCount(), 0)
   })
 
   it('interrompe a sincronização geral quando um estado falha', async (t) => {
-    const { service, repository, fetchMock } = setup(t)
+    const now = new Date('2026-09-09T12:00:00.000Z')
+    const { service, repository, fetchMock } = setup(t, 'unit-test-api-key', {
+      now: () => now,
+    })
     fetchMock.mock.mockImplementation(async (input) => {
       assert.ok(input instanceof URL)
       const state = input.searchParams.get('jurisdiction')
@@ -105,6 +216,11 @@ describe('PeopleService', { concurrency: false }, () => {
       ['AL', 'AK', 'AZ'],
     )
     assert.equal(repository.upsertMany.mock.callCount(), 2)
+
+    repository.updatesByState.mock.mockImplementation(async () =>
+      US_STATE_CODES.map((state) => ({ state, updatedAt: now })),
+    )
+    assert.deepEqual(await service.syncAll(), { fetched: 0, states: 0 })
   })
 
   it('autentica a consulta, aplica timeout e mapeia os campos', async (t) => {
@@ -228,6 +344,7 @@ describe('PeopleService', { concurrency: false }, () => {
     ['ocd-jurisdiction/country:us/state:ny/government', 'NY'],
     ['ocd-jurisdiction/country:us/state:Tx/government', 'TX'],
     ['ocd-jurisdiction/country:us/state:CA', 'CA'],
+    ['ocd-jurisdiction/country:us/district:dc/government', 'DC'],
   ]) {
     it(`extrai o estado do identificador ${jurisdictionId}`, async (t) => {
       const { service, fetchMock } = setup(t)
@@ -251,6 +368,7 @@ describe('PeopleService', { concurrency: false }, () => {
     'ocd-jurisdiction/country:us/government',
     'ocd-jurisdiction/country:us/state:california/government',
     'ocd-jurisdiction/country:us/state:ca-extra/government',
+    'ocd-jurisdiction/country:us/district:ny/government',
   ]) {
     it(`não persiste uma jurisdição inválida: ${jurisdictionId}`, async (t) => {
       const { service, repository, fetchMock } = setup(t)

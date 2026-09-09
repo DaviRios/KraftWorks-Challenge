@@ -1,8 +1,22 @@
 import type { PrismaClient } from '../generated/prisma/client.js'
-import type { ListPeopleFilters, Person } from './people.service.js'
+import type { ListPeopleFilters, Person, StateLastUpdate } from './people.types.js'
 
 export class PeopleRepository {
   constructor(private readonly prisma: PrismaClient) {}
+
+  async updatesByState(): Promise<StateLastUpdate[]> {
+    const updates = await this.prisma.person.groupBy({
+      by: ['state'],
+      _max: {
+        updatedAt: true,
+      },
+    })
+
+    return updates.map((update) => ({
+      state: update.state,
+      updatedAt: update._max.updatedAt,
+    }))
+  }
 
   async upsertMany(people: Person[]): Promise<void> {
     await this.prisma.$transaction(
@@ -48,8 +62,14 @@ export class PeopleRepository {
             }
           : {}),
       },
-      orderBy: {
-        name: 'asc',
+      orderBy: { name: 'asc' },
+      select: {
+        externalId: true,
+        name: true,
+        role: true,
+        imageUrl: true,
+        state: true,
+        party: true,
       },
     })
 

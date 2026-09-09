@@ -5,10 +5,11 @@ import type { ZodType } from 'zod'
 
 import { peopleController } from '../../src/people.controller.js'
 import {
-  type ListPeopleFilters,
   type PeopleService,
+  SyncAlreadyRunningError,
   US_STATE_CODES,
 } from '../../src/people.service.js'
+import type { ListPeopleFilters } from '../../src/people.types.js'
 import { makePerson } from './fixtures.js'
 
 interface UnitRequest {
@@ -36,7 +37,7 @@ async function setup(t: TestContext) {
   const service = {
     syncAll: t.mock.fn<PeopleService['syncAll']>(async () => ({
       fetched: 0,
-      states: US_STATE_CODES.length,
+      states: 0,
     })),
     list: t.mock.fn<PeopleService['list']>(async () => []),
   }
@@ -123,8 +124,22 @@ describe('peopleController', () => {
     assert.equal(reply.statusCode, 200)
     assert.deepEqual(reply.payload, {
       fetched: 0,
-      states: US_STATE_CODES.length,
+      states: 0,
     })
+  })
+
+  it('responde 409 quando uma sincronização já está em andamento', async (t) => {
+    const { route, service, request, reply, logError } = await setup(t)
+    service.syncAll.mock.mockImplementation(async () => {
+      throw new SyncAlreadyRunningError()
+    })
+
+    assert.equal(await route('POST /people/sync').handler(request, reply), reply)
+    assert.equal(reply.statusCode, 409)
+    assert.deepEqual(reply.payload, {
+      message: 'A synchronization is already running',
+    })
+    assert.equal(logError.mock.callCount(), 0)
   })
 
   for (const error of [new Error('Detalhes internos da falha'), 'Falha sem Error']) {
@@ -266,13 +281,17 @@ describe('Schemas de resposta de peopleController', () => {
       fetched: 0,
       states: US_STATE_CODES.length,
     })
+    assert.deepEqual(schema.parse({ fetched: 0, states: 0 }), {
+      fetched: 0,
+      states: 0,
+    })
     for (const fetched of [-1, 1.5, '1', null, undefined]) {
       assert.equal(
         schema.safeParse({ fetched, states: US_STATE_CODES.length }).success,
         false,
       )
     }
-    for (const states of [-1, 0, 1.5, '51', null, undefined]) {
+    for (const states of [-1, 1.5, '51', null, undefined]) {
       assert.equal(schema.safeParse({ fetched: 0, states }).success, false)
     }
   })

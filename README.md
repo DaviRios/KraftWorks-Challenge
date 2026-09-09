@@ -114,7 +114,9 @@ jurisdições processadas:
 ```
 
 Os números acima são apenas um exemplo e podem mudar conforme os dados da
-OpenStates.
+OpenStates. O campo `states` informa quantas jurisdições foram realmente
+sincronizadas naquela execução e pode ser `0` quando todo o cache estiver
+atualizado.
 
 ## 6. Tempo e cota da primeira carga
 
@@ -137,7 +139,9 @@ evitando duplicações durante novas sincronizações.
 
 Como o volume do PostgreSQL é persistente, ao parar e iniciar a stack novamente
 os dados continuam disponíveis. Nas execuções futuras, basta subir os containers
-e abrir o frontend; sincronize novamente apenas quando quiser atualizar o cache.
+e abrir o frontend. Ao solicitar outra sincronização, o backend consulta apenas
+jurisdições sem dados ou cuja atualização mais recente ocorreu há mais de sete
+dias. Uma segunda sincronização simultânea é recusada com status `409`.
 
 ## 8. Parar a aplicação sem apagar os dados
 

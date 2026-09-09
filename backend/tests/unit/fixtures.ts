@@ -1,4 +1,4 @@
-import type { Person } from '../../src/people.service.js'
+import type { Person } from '../../src/people.types.js'
 
 interface OpenStatesPerson {
   id: string

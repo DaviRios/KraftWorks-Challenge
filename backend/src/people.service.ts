@@ -1,15 +1,19 @@
 import { z } from 'zod'
 import type { PeopleRepository } from './people.repository.js'
+import type { ListPeopleFilters, Person } from './people.types.js'
 
 const OPENSTATES_PER_PAGE = 50
 const DEFAULT_RATE_LIMIT_RETRIES = 3
 const DEFAULT_RATE_LIMIT_WAIT_MS = 60_000
+const CACHE_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1_000
 
 type Sleep = (milliseconds: number) => Promise<void>
+type Now = () => Date
 
 export interface PeopleServiceOptions {
   maxRateLimitRetries?: number
   sleep?: Sleep
+  now?: Now
 }
 
 function sleep(milliseconds: number): Promise<void> {
@@ -40,20 +44,6 @@ const openStatesResponseSchema = z.object({
   }),
 })
 
-export interface ListPeopleFilters {
-  state?: string
-  party?: string
-}
-
-export interface Person {
-  id: string
-  name: string
-  role: string | null
-  imageUrl: string | null
-  state: string
-  party: string | null
-}
-
 export interface SyncPeopleResult {
   fetched: number
   people: Person[]
@@ -62,6 +52,13 @@ export interface SyncPeopleResult {
 export interface SyncAllPeopleResult {
   fetched: number
   states: number
+}
+
+export class SyncAlreadyRunningError extends Error {
+  constructor() {
+    super('A synchronization is already running')
+    this.name = 'SyncAlreadyRunningError'
+  }
 }
 
 export const US_STATE_CODES = [
@@ -121,6 +118,8 @@ export const US_STATE_CODES = [
 export class PeopleService {
   private readonly maxRateLimitRetries: number
   private readonly sleep: Sleep
+  private readonly now: Now
+  private syncInProgress = false
 
   constructor(
     private readonly apiKey: string,
@@ -133,29 +132,54 @@ export class PeopleService {
 
     this.maxRateLimitRetries = options.maxRateLimitRetries ?? DEFAULT_RATE_LIMIT_RETRIES
     this.sleep = options.sleep ?? sleep
+    this.now = options.now ?? (() => new Date())
   }
 
   private extractStateCode(jurisdictionId: string): string {
-    const match = jurisdictionId.match(/\/state:([a-z]{2})(?:\/|$)/i)
+    const stateCode =
+      jurisdictionId.match(/\/state:([a-z]{2})(?:\/|$)/i)?.[1] ??
+      jurisdictionId.match(/\/district:(dc)(?:\/|$)/i)?.[1]
 
-    if (!match) {
+    if (!stateCode) {
       throw new Error(`Cannot extract state of jurisdiction: ${jurisdictionId}`)
     }
 
-    return match[1].toUpperCase()
+    return stateCode.toUpperCase()
   }
 
   async syncAll(): Promise<SyncAllPeopleResult> {
-    let fetched = 0
-
-    for (const state of US_STATE_CODES) {
-      const result = await this.syncByState(state)
-      fetched += result.fetched
+    if (this.syncInProgress) {
+      throw new SyncAlreadyRunningError()
     }
 
-    return {
-      fetched,
-      states: US_STATE_CODES.length,
+    this.syncInProgress = true
+
+    try {
+      const cutoff = new Date(this.now().getTime() - CACHE_MAX_AGE_MS)
+      const updates = await this.peopleRepository.updatesByState()
+      const updatesByState = new Map(
+        updates.map(({ state, updatedAt }) => [state, updatedAt]),
+      )
+      let fetched = 0
+      let states = 0
+
+      for (const state of US_STATE_CODES) {
+        const lastUpdatedAt = updatesByState.get(state)
+        const isStale = !lastUpdatedAt || lastUpdatedAt < cutoff
+
+        if (isStale) {
+          const result = await this.syncByState(state)
+          fetched += result.fetched
+          states++
+        }
+      }
+
+      return {
+        fetched,
+        states,
+      }
+    } finally {
+      this.syncInProgress = false
     }
   }
 

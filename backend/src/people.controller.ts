@@ -2,7 +2,7 @@ import type { FastifyInstance } from 'fastify'
 import type { ZodTypeProvider } from 'fastify-type-provider-zod'
 import { z } from 'zod'
 
-import type { PeopleService } from './people.service.js'
+import { type PeopleService, SyncAlreadyRunningError } from './people.service.js'
 
 const peopleListQuerySchema = z.object({
   state: z
@@ -40,8 +40,8 @@ const syncPeopleResponseSchema = z
     states: z
       .number()
       .int()
-      .positive()
-      .describe('Quantidade de estados e jurisdições sincronizados'),
+      .nonnegative()
+      .describe('Quantidade de estados e jurisdições sincronizados nesta execução'),
   })
   .describe('Resumo da sincronização geral')
 
@@ -82,9 +82,10 @@ export async function peopleController(
         operationId: 'syncAllPeople',
         summary: 'Sincroniza pessoas de todos os estados',
         description:
-          'Percorre todas as páginas da OpenStates para os 50 estados e o Distrito de Colúmbia, respeita o limite de requisições da API externa e atualiza o cache PostgreSQL usando upsert. A operação pode levar vários minutos.',
+          'Sincroniza as jurisdições sem dados ou cuja última atualização ocorreu há mais de sete dias. Percorre as páginas da OpenStates, respeita o limite da API externa e atualiza o cache PostgreSQL usando upsert. A primeira execução pode levar vários minutos.',
         response: {
           200: syncPeopleResponseSchema,
+          409: errorResponseSchema,
           500: errorResponseSchema,
           502: errorResponseSchema,
         },
@@ -95,6 +96,12 @@ export async function peopleController(
         const result = await options.peopleService.syncAll()
         return reply.code(200).send(result)
       } catch (error) {
+        if (error instanceof SyncAlreadyRunningError) {
+          return reply.code(409).send({
+            message: error.message,
+          })
+        }
+
         request.log.error(
           {
             err: error,
