@@ -193,6 +193,10 @@
 }
 
 @media (max-width: 900px) {
+  .app {
+    background: var(--color-canvas);
+  }
+
   .hero {
     grid-template-columns: 1fr;
     gap: 16px;
@@ -211,6 +215,10 @@
   .heroAccent::before,
   .accentLines {
     display: none;
+  }
+
+  .heroAccent::after {
+    box-shadow: none;
   }
 }
 
